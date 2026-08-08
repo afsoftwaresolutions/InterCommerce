@@ -76,6 +76,10 @@
     <string name="catalog_label">Catálogo</string>
     <string name="detail_label">Detalle del producto</string>
     <string name="cart_label">Mi carrito</string>
+    <string name="switch_to_list_view">Cambiar a vista de lista</string>
+    <string name="switch_to_grid_view">Cambiar a vista de cuadrícula</string>
+    <string name="view_mode_list_short">Lista</string>
+    <string name="view_mode_grid_short">Grilla</string>
 
     <plurals name="cart_has_products">
         <item quantity="one">El carrito tiene %d producto</item>

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -30,11 +31,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -59,6 +66,11 @@ import com.afsoftwaresolutions.intercommerce.ui.theme.InterCommerceTheme
 import kotlinx.coroutines.flow.flowOf
 import kotlin.collections.emptyList
 
+private enum class CatalogViewMode {
+    GRID,
+    LIST
+}
+
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
@@ -75,6 +87,7 @@ fun CatalogScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val cachedDataMessage = stringResource(R.string.cached_data_message)
+    var viewMode by rememberSaveable { mutableStateOf(CatalogViewMode.GRID) }
 
     val refreshState = products.loadState.refresh
     val appendState = products.loadState.append
@@ -94,6 +107,33 @@ fun CatalogScreen(
             TopAppBar(
                 title = { Text(text = stringResource(R.string.catalog_title)) },
                 actions = {
+                    val toggleContentDescription = if (viewMode == CatalogViewMode.GRID) {
+                        stringResource(R.string.switch_to_list_view)
+                    } else {
+                        stringResource(R.string.switch_to_grid_view)
+                    }
+                    val toggleLabel = if (viewMode == CatalogViewMode.GRID) {
+                        stringResource(R.string.view_mode_list_short)
+                    } else {
+                        stringResource(R.string.view_mode_grid_short)
+                    }
+
+                    IconButton(
+                        modifier = Modifier
+                            .semantics {
+                                contentDescription = toggleContentDescription
+                            }
+                            .testTag("catalog_view_toggle"),
+                        onClick = {
+                            viewMode = if (viewMode == CatalogViewMode.GRID) {
+                                CatalogViewMode.LIST
+                            } else {
+                                CatalogViewMode.GRID
+                            }
+                        }
+                    ) {
+                        Text(text = toggleLabel)
+                    }
                     IconButton(onClick = onCartClick) {
                         BadgedBox(
                             badge = {
@@ -114,31 +154,33 @@ fun CatalogScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        if (uiState.isSearchActive) {
-            SearchContent(
-                uiState = uiState,
-                onSearchQueryChange = onSearchQueryChange,
-                onClearSearch = onClearSearch,
-                onProductClick = onProductClick,
-                onRetrySearch = { onSearchQueryChange(uiState.searchQuery) },
-                innerPadding = innerPadding,
-                gridState = gridState
-            )
-        } else {
-            PagedCatalogContent(
-                products = products,
-                refreshState = refreshState,
-                appendState = appendState,
-                appendError = appendError,
-                hasPagedItems = hasPagedItems,
-                query = uiState.searchQuery,
-                onSearchQueryChange = onSearchQueryChange,
-                onClearSearch = onClearSearch,
-                onProductClick = onProductClick,
-                onRetry = onRetry,
-                innerPadding = innerPadding,
-                gridState = gridState
-            )
+        CatalogLayout(
+            innerPadding = innerPadding,
+            query = uiState.searchQuery,
+            onSearchQueryChange = onSearchQueryChange,
+            onClearSearch = onClearSearch
+        ) {
+            if (uiState.isSearchActive) {
+                SearchContent(
+                    uiState = uiState,
+                    onProductClick = onProductClick,
+                    onRetrySearch = { onSearchQueryChange(uiState.searchQuery) },
+                    gridState = gridState,
+                    viewMode = viewMode
+                )
+            } else {
+                PagedCatalogContent(
+                    products = products,
+                    refreshState = refreshState,
+                    appendState = appendState,
+                    appendError = appendError,
+                    hasPagedItems = hasPagedItems,
+                    onProductClick = onProductClick,
+                    onRetry = onRetry,
+                    gridState = gridState,
+                    viewMode = viewMode
+                )
+            }
         }
     }
 }
@@ -146,32 +188,34 @@ fun CatalogScreen(
 @Composable
 private fun SearchContent(
     uiState: CatalogUiState,
-    onSearchQueryChange: (String) -> Unit,
-    onClearSearch: () -> Unit,
     onProductClick: (Int) -> Unit,
     onRetrySearch: () -> Unit,
-    innerPadding: PaddingValues,
-    gridState: LazyGridState
+    gridState: LazyGridState,
+    viewMode: CatalogViewMode
 ) {
     val searchResults = uiState.searchResults
-    CatalogLayout(innerPadding, uiState.searchQuery, onSearchQueryChange, onClearSearch) {
-        when {
-            uiState.isSearching -> {
-                SkeletonGrid(gridState = gridState, count = 6)
-            }
+    when {
+        uiState.isSearching -> {
+            SkeletonGrid(
+                gridState = gridState,
+                count = 6,
+                viewMode = viewMode
+            )
+        }
 
-            uiState.searchError != null && searchResults.isEmpty() -> {
-                FullScreenError(message = uiState.searchError, onRetry = onRetrySearch)
-            }
+        uiState.searchError != null && searchResults.isEmpty() -> {
+            FullScreenError(message = uiState.searchError, onRetry = onRetrySearch)
+        }
 
-            searchResults.isEmpty() -> {
-                EmptyState(
-                    titleRes = R.string.search_empty_title,
-                    messageRes = R.string.search_empty_message
-                )
-            }
+        searchResults.isEmpty() -> {
+            EmptyState(
+                titleRes = R.string.search_empty_title,
+                messageRes = R.string.search_empty_message
+            )
+        }
 
-            else -> {
+        else -> {
+            if (viewMode == CatalogViewMode.GRID) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 160.dp),
                     state = gridState,
@@ -199,6 +243,32 @@ private fun SearchContent(
                         )
                     }
                 }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("catalog_search_list"),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        count = searchResults.size,
+                        key = { index -> searchResults[index].id },
+                        contentType = { "product" }
+                    ) { index ->
+                        val product = searchResults[index]
+                        ProductCard(
+                            productId = product.id,
+                            title = product.title,
+                            thumbnail = product.thumbnail,
+                            price = product.price,
+                            discount = product.discountPercentage,
+                            rating = product.rating,
+                            stock = product.stock,
+                            onClick = onProductClick
+                        )
+                    }
+                }
             }
         }
     }
@@ -211,39 +281,30 @@ private fun PagedCatalogContent(
     appendState: LoadState,
     appendError: Throwable?,
     hasPagedItems: Boolean,
-    query: String,
-    onSearchQueryChange: (String) -> Unit,
-    onClearSearch: () -> Unit,
     onProductClick: (Int) -> Unit,
     onRetry: () -> Unit,
-    innerPadding: PaddingValues,
-    gridState: LazyGridState
+    gridState: LazyGridState,
+    viewMode: CatalogViewMode
 ) {
     if (refreshState is LoadState.Loading && !hasPagedItems) {
-        CatalogLayout(innerPadding, query, onSearchQueryChange, onClearSearch) {
-            FullScreenLoading()
-        }
+        FullScreenLoading()
         return
     }
 
     if (refreshState is LoadState.Error && !hasPagedItems) {
-        CatalogLayout(innerPadding, query, onSearchQueryChange, onClearSearch) {
-            FullScreenError(message = refreshState.error.toPagingUiText(), onRetry = onRetry)
-        }
+        FullScreenError(message = refreshState.error.toPagingUiText(), onRetry = onRetry)
         return
     }
 
     if (refreshState is LoadState.NotLoading && products.itemCount == 0) {
-        CatalogLayout(innerPadding, query, onSearchQueryChange, onClearSearch) {
-            EmptyState(
-                titleRes = R.string.catalog_empty_title,
-                messageRes = R.string.catalog_empty_message
-            )
-        }
+        EmptyState(
+            titleRes = R.string.catalog_empty_title,
+            messageRes = R.string.catalog_empty_message
+        )
         return
     }
 
-    CatalogLayout(innerPadding, query, onSearchQueryChange, onClearSearch) {
+    if (viewMode == CatalogViewMode.GRID) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 160.dp),
             state = gridState,
@@ -302,6 +363,63 @@ private fun PagedCatalogContent(
                 }
             }
         }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("catalog_paged_list"),
+        contentPadding = PaddingValues(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(
+            count = products.itemCount,
+            key = { index -> products[index]?.id ?: "loading_$index" },
+            contentType = { "product" }
+        ) { index ->
+            val product = products[index]
+            if (product != null) {
+                ProductCard(
+                    productId = product.id,
+                    title = product.title,
+                    thumbnail = product.thumbnail,
+                    price = product.price,
+                    discount = product.discountPercentage,
+                    rating = product.rating,
+                    stock = product.stock,
+                    onClick = onProductClick
+                )
+            } else {
+                ProductCardSkeleton()
+            }
+        }
+
+        if (appendState is LoadState.Loading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .testTag("catalog_append_loading"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+        if (appendError != null) {
+            item {
+                FullScreenError(
+                    message = appendError.toPagingUiText(),
+                    onRetry = onRetry,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                )
+            }
+        }
     }
 }
 
@@ -351,15 +469,30 @@ private fun CatalogLayout(
 @Composable
 private fun SkeletonGrid(
     gridState: LazyGridState,
-    count: Int
+    count: Int,
+    viewMode: CatalogViewMode
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 160.dp),
-        state = gridState,
+    if (viewMode == CatalogViewMode.GRID) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            state = gridState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("catalog_skeleton_grid"),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(count) {
+                ProductCardSkeleton()
+            }
+        }
+        return
+    }
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .testTag("catalog_skeleton_grid"),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .testTag("catalog_skeleton_list"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(count) {

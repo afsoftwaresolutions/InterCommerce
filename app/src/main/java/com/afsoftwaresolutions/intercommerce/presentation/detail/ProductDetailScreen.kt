@@ -420,7 +420,7 @@ private fun LocalPlaceholderImage(contentDescription: String) {
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(id = R.mipmap.ic_launcher),
+            painter = painterResource(id = R.drawable.no_photo),
             contentDescription = null,
             modifier = Modifier.height(64.dp)
         )
