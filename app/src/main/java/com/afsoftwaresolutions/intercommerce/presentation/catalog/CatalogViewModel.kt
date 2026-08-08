@@ -45,6 +45,18 @@ class CatalogViewModel @Inject constructor(
                 return@transformLatest
             }
 
+            if (normalized.length < MIN_SEARCH_LENGTH) {
+                emit(
+                    CatalogUiState(
+                        isSearching = false,
+                        searchResults = emptyList(),
+                        searchError = null,
+                        isSearchActive = true
+                    )
+                )
+                return@transformLatest
+            }
+
             emit(
                 CatalogUiState(
                     isSearching = true,
@@ -92,5 +104,9 @@ class CatalogViewModel @Inject constructor(
 
     fun clearSearch() {
         searchQuery.value = ""
+    }
+
+    private companion object {
+        const val MIN_SEARCH_LENGTH = 2
     }
 }
