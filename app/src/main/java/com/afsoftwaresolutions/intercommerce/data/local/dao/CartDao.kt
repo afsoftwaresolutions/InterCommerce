@@ -8,11 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CartDao {
-
     @Query(
         """
         SELECT * FROM cart_items
-        ORDER BY updatedAtEpochMillis DESC, productId ASC
+        ORDER BY productId ASC
         """
     )
     fun observeCartItems(): Flow<List<CartItemEntity>>

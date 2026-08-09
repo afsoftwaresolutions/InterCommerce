@@ -42,7 +42,7 @@ class CartDaoTest {
 
         val observed = cartDao.observeCartItems().first()
 
-        assertEquals(listOf(3, 1, 2), observed.map { it.productId })
+        assertEquals(listOf(1, 2, 3), observed.map { it.productId })
     }
 
     @Test
